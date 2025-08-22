@@ -1,0 +1,130 @@
+---
+title: 'Practical Machine Learning: Prediction Assignment'
+author: "Luis Donaldo"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(caret)
+library(corrplot)
+library(randomForest)
+library(rpart.plot)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Overview
+
+This report is part of the final project for the Practical Machine Learning course by Johns Hopkins University on Coursera. The objective of this project is to build a machine learning model that can accurately predict the manner in which individuals performed a set of exercises based on sensor data. The model will be trained using data collected from accelerometers on the belt, forearm, arm, and dumbbell of six participants.
+
+We are required to:
+
+Clean and preprocess the training dataset.
+
+Test and compare several models.
+
+Select the best performing model using cross-validation.
+
+Use the selected model to predict outcomes on the testing dataset.
+
+
+### Introduction
+
+In recent years, the use of wearable devices and sensors has expanded significantly in the fields of health, sports, and physical rehabilitation. One practical application of this technology is to automatically classify physical activities based on movement patterns.
+
+In this project, we use data collected from multiple body-mounted sensors to predict the "classe" variable, which describes how an activity was performed. The dataset includes measurements like total acceleration, gyroscopic data, and angles from different sensors.
+
+We will follow a machine learning workflow that includes:
+
+Data cleaning and preparation.
+
+Model training and evaluation.
+
+Prediction and performance assessment.
+
+The goal is to develop a model that generalizes well and performs accurately on unseen data.
+
+### Data Loading and Cleaning
+
+We used two datasets provided by the course instructors:
+
+pml-training.csv: This dataset contains 19,622 observations and 160 variables. It includes sensor measurements and a target variable classe, which takes values from A to E, representing different exercise classifications.
+
+pml-testing.csv: This dataset contains 20 observations with the same structure as the training set, but without the classe variable. Our final predictions will be made on this dataset.
+
+```{r data_loading, echo=TRUE}
+# Data loading
+df_train <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+df_test <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+df_train <- read.csv(url(df_train), na.strings = c("NA",""))
+df_test  <- read.csv(url(df_test), na.strings = c("NA",""))
+```
+
+
+```{r data_cleaning, echo=TRUE}
+# Data Cleaning
+na_prop <- colMeans(is.na(df_train))
+cols_to_keep <- names(na_prop[na_prop < 0.95])
+df_train_clean <- df_train[, cols_to_keep]
+
+irrelevant_cols <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2",
+                     "cvtd_timestamp", "new_window", "num_window")
+df_train_clean <- df_train_clean[, !(names(df_train_clean) %in% irrelevant_cols)]
+
+df_train_clean$classe <- as.factor(df_train_clean$classe)
+
+# Test Dataset
+features <- setdiff(names(df_train_clean), "classe")
+df_test_clean <- df_test[, features]
+```
+
+```{r data_split, echo=TRUE}
+
+set.seed(123)
+inTrain <- createDataPartition(df_train_clean$classe, p = 0.7, list = FALSE)
+training <- df_train_clean[inTrain, ]
+testing <- df_train_clean[-inTrain, ]
+
+```
+
+
+### Correlation Analysis
+```{r correlation_plot, echo=TRUE}
+
+numeric_vars <- sapply(training, is.numeric)
+numeric_data <- training[, numeric_vars]
+
+# Calculate Correlation Matrix
+cor_matrix <- cor(numeric_data, use = "pairwise.complete.obs")
+
+# Make the plot
+corrplot(cor_matrix, method = "color", type = "lower", tl.cex = 0.6, order = "hclust")
+
+```
+
+### Random Forest
+
+```{r random_forest, echo=TRUE}
+set.seed(123)  # para reproducibilidad
+rf_model <- randomForest(classe ~ ., data = df_train_clean, ntree = 100, importance = TRUE)
+
+rf_model
+```
+
+#### Predictions on Test Data
+
+```{r rf_predictions, echo=TRUE}
+
+predictions_test <- predict(rf_model, df_test_clean)
+predictions_test
+```
+
+### Conclusion
+
+The Random Forest model trained on the dataset shows exceptional performance, achieving an accuracy of 99.62% with a Kappa index of 0.9952, indicating near-perfect agreement between the model's predictions and the actual classes.
+
+The confusion matrix shows very few misclassifications, with most occurring between nearby classes, which is reasonable in real-world scenarios.
+
+With a p-value < 2.2e-16, we can conclude that the model is significantly better than a trivial majority-class classification.
